@@ -35,12 +35,13 @@ class DocumentPage:
         self.source = source
         self.num = pagenum
 
+        pidhighlights = pid
+
         # On disk, these files are named by a UUID
         self.rmpath = f'{{ID}}/{pid}.rm'
         if not source.exists(self.rmpath):
             # From the API, these files are just numbered, however the
             # json file for the highlights still uses the UUID-style pid.
-            pidhighlights = pid
             pid = str(pagenum)
             self.rmpath = f'{{ID}}/{pid}.rm'
 
