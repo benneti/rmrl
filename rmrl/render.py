@@ -76,7 +76,7 @@ def render(source, *,
     pages = []
     if source.exists('{ID}.content'):
         with source.open('{ID}.content', 'r') as f:
-            pages = json.load(f).get('pages', [])
+            pages = json.load(f).get('cPages', {}).get('pages', [])
 
     # Render each page as a pdf
     tmpfh = tempfile.TemporaryFile()
@@ -89,7 +89,8 @@ def render(source, *,
     changed_pages = []
     annotations = []
     for i in range(0, len(pages)):
-        page = document.DocumentPage(source, pages[i], i)
+        template_name = pages[i].get("template", {}).get("value", None)
+        page = document.DocumentPage(source, pages[i]["id"], i, template_name)
         if source.exists(page.rmpath):
             changed_pages.append(i)
         page.render_to_painter(pdf_canvas, vector, template_alpha)

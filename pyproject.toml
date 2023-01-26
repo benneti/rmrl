@@ -8,11 +8,12 @@ repository = "https://github.com/rschroll/rmrl"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.7"
+python = "^3.10"
 pdfrw = "^0.4"
 reportlab = "^3.5.59"
 svglib = "^1.0.1"
 xdg = "^5.0.1"
+rmscene = "^0.1.0"
 
 [tool.poetry.dev-dependencies]
 ipython = "^7.19.0"

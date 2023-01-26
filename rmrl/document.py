@@ -19,17 +19,18 @@ import json
 import logging
 
 from reportlab.graphics import renderPDF
+from rmscene import Pen, PenColor, Point, SceneLineItemBlock, TreeNodeBlock, read_blocks
 from svglib.svglib import svg2rlg
 
-from . import lines, pens
+from . import pens
 from .constants import DISPLAY, PDFHEIGHT, PDFWIDTH, PTPERPX, TEMPLATE_PATH
-
+from .lines import Layer, Segment, Stroke
 
 log = logging.getLogger(__name__)
 
 class DocumentPage:
     # A single page in a document
-    def __init__(self, source, pid, pagenum):
+    def __init__(self, source, pid, pagenum, template_name = None):
         # Page 0 is the first page!
         self.source = source
         self.num = pagenum
@@ -50,21 +51,9 @@ class DocumentPage:
 
         # Try to load template
         self.template = None
-        template_names = []
-        pagedatapath = '{ID}.pagedata'
-        if source.exists(pagedatapath):
-            with source.open(pagedatapath, 'r') as f:
-                template_names = f.read().splitlines()
-
-        if template_names:
-            # I have encountered an issue with some PDF files, where the
-            # rM won't save the page template for later pages. In this
-            # case, just take the last-available page template, which
-            # is usually 'Blank'.
-            template_name = template_names[max(self.num, len(template_names) - 1)]
-            template_path = TEMPLATE_PATH / f'{template_name}.svg'
-            if template_name != 'Blank' and template_path.exists():
-                self.template = str(template_path)
+        template_path = TEMPLATE_PATH / f'{template_name}.svg'
+        if template_name != 'Blank' and template_path.exists():
+            self.template = str(template_path)
 
         # Load layers
         self.layers = []
@@ -82,6 +71,53 @@ class DocumentPage:
             annotations.append(layer.get_grouped_annotations())
         return annotations
 
+    def get_layers(self, source):
+        blocks = read_blocks(source)
+
+        def to_segment(point: Point) -> Segment:
+            return Segment(
+                x=point.x + 1404 / 2.0,
+                y=point.y,
+                speed=point.speed,
+                direction=point.direction,
+                width=point.width / 4.0,
+                pressure=point.pressure,
+            )
+
+        layers = []
+        current_layer = ""
+        current_strokes = []
+
+        for block in blocks:
+            if isinstance(block, SceneLineItemBlock):
+                if block.value is None:
+                    continue
+
+                color: PenColor = block.value.color
+                tool: Pen = block.value.tool
+                points: list[Point] = block.value.points
+                thickness_scale: float = block.value.thickness_scale
+                # starting_length: float = block.value.starting_length
+
+                segments = list(map(to_segment, points))
+                stroke = Stroke(tool, color, None, thickness_scale, None, segments)
+                current_strokes.append(stroke)
+
+            elif isinstance(block, TreeNodeBlock):
+                if current_layer == block.label.value:
+                    continue
+
+                layers.append(Layer(current_strokes, current_layer))
+                current_layer = block.label.value
+                current_strokes = []
+            else:
+                print(f'warning: not converting block: {block.__class__}')
+
+        layers.append(Layer(current_strokes, current_layer))
+        current_strokes = []
+
+        return layers[1:]
+
     def load_layers(self):
         # Loads layers from the .rm files
 
@@ -92,18 +128,13 @@ class DocumentPage:
         # Load reMy version of page layers
         pagelayers = None
         with self.source.open(self.rmpath, 'rb') as f:
-            _, pagelayers = lines.readLines(f)
+            pagelayers = self.get_layers(f)
 
         # Load layer data
         for i in range(0, len(pagelayers)):
-            layerstrokes = pagelayers[i]
+            layerstrokes, layer_name = pagelayers[i]
 
-            try:
-                name = self.metadict['layers'][i]['name']
-            except:
-                name = 'Layer ' + str(i + 1)
-
-            layer = DocumentPageLayer(self, name=name)
+            layer = DocumentPageLayer(self, name=layer_name)
             layer.strokes = layerstrokes
             self.layers.append(layer)
 
@@ -157,12 +188,14 @@ class DocumentPageLayer:
         self.name = name
 
         self.colors = [
-            #QSettings().value('pane/notebooks/export_pdf_blackink'),
-            #QSettings().value('pane/notebooks/export_pdf_grayink'),
-            #QSettings().value('pane/notebooks/export_pdf_whiteink')
             (0, 0, 0),
             (0.5, 0.5, 0.5),
-            (1, 1, 1)
+            (1, 1, 1),
+            (1, 1, 0),
+            (0, 1, 0),
+            (1, 0, 1),
+            (0, 0, 1),
+            (1, 0, 0),
         ]
 
         # Set this from the calling func
