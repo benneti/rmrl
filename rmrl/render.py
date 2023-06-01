@@ -77,9 +77,14 @@ def render(source, *,
     redirections = []  # page numbers. -1 means the page is an inserted note.
     if source.exists('{ID}.content'):
         with source.open('{ID}.content', 'r') as f:
+            # v4 and v5
+            pages_v4 = json.load(f).get('cPages', {}).get('pages', [])
+            # v6 documents
             content = json.load(f)
             pages = content.get('pages', [])
             redirections = content.get('redirectionPageMap', [])
+            # for now we simply merge the pages
+            pages = pages + pages_v4
     
     page_indices = redirections if redirections else range(0, len(pages))
 
@@ -94,7 +99,8 @@ def render(source, *,
     changed_pages = []
     annotations = []
     for i in range(0, len(pages)):
-        page = document.DocumentPage(source, pages[i], i)
+        template_name = pages[i].get("template", {}).get("value", None)
+        page = document.DocumentPage(source, pages[i]["id"], i, template_name)
         if source.exists(page.rmpath):
             changed_pages.append(i)
         page.render_to_painter(pdf_canvas, vector, template_alpha)

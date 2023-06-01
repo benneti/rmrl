@@ -2,7 +2,7 @@
 # This is the model for Lines, which come from RM files.
 #
 # This file was written originally for the reMy project and modified for
-# RCU.
+# RCU and now rmcl.
 #
 # reMy is a file manager for the reMarkable tablet.
 # Copyright (C) 2020  Emanuele D'Osualdo.
@@ -52,6 +52,12 @@ class UnsupportedVersion(Exception):
 class InvalidFormat(Exception):
     pass
 
+def getVersion(source):
+    header, ver, *_ = readStruct(S_HEADER_PAGE, source)
+    if not header.startswith(HEADER_START):
+        raise InvalidFormat("Header is invalid")
+    return int(ver)
+
 def readStruct(fmt, source):
     buff = source.read(fmt.size)
     return fmt.unpack(buff)
@@ -66,17 +72,13 @@ def readStroke5(source):
 # source is a filedescriptor from which we can .read(N)
 def readLines(source):
     try:
-
-        header, ver, *_ = readStruct(S_HEADER_PAGE, source)
-        if not header.startswith(HEADER_START):
-            raise InvalidFormat("Header is invalid")
-        ver = int(ver)
+        ver = getVersion(source)
         if ver == 3:
             readStroke = readStroke3
         elif ver == 5:
             readStroke = readStroke5
         else:
-            raise UnsupportedVersion("Remy supports notebooks in the version 3 and 5 format only")
+            raise UnsupportedVersion("rmcl supports notebooks in the version 3 and 5 format only")
         n_layers, _, _ = readStruct(S_PAGE, source)
         layers = []
         for l in range(n_layers):
