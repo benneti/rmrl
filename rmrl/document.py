@@ -48,8 +48,11 @@ class DocumentPage:
             pid = str(pagenum)
             self.rmpath = f'{{ID}}/{pid}.rm'
 
-        with self.source.open(self.rmpath, 'rb') as f:
-            self.version = lines.getVersion(f)
+        if source.exists(self.rmpath):
+            with self.source.open(self.rmpath, 'rb') as f:
+                self.version = lines.getVersion(f)
+        else:
+            self.version = None
 
         # Try to load page metadata
         self.metadict = None
@@ -117,8 +120,8 @@ class DocumentPage:
         def to_segment(point: Point) -> Segment:
             # TODO how to get the correct transformations?
             return Segment(
-                x=point.x * 0.7 + 1404 / 2.0 - 40,
-                y=point.y * 0.7, # - 1872 / 14.0,
+                x=point.x + 1404 / 2.0,
+                y=point.y - 1872 / 2.0,
                 speed=point.speed,
                 direction=point.direction,
                 width=point.width / 4.0,

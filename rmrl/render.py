@@ -63,6 +63,7 @@ def render(source, *,
 
     vector=True  # TODO: Different rendering styles
     source = sources.get_source(source)
+    version = None
 
     # If this is using a base PDF, the percentage is calculated
     # differently.
@@ -75,14 +76,19 @@ def render(source, *,
     # process.
     pages = []  # list of uuids of each page.
     redirections = []  # page numbers. -1 means the page is an inserted note.
+    orientation = None
+    # margins = None
     if source.exists('{ID}.content'):
         with source.open('{ID}.content', 'r') as f:
             content = json.load(f)
-            # pages for documents < v6
+            # pages for documents < v6 (actually it seems that v6 also have this sometimes)
             pages_v5 = content.get('cPages', {}).get('pages', [])
             # v6 documents
             pages = content.get('pages', [])
             redirections = content.get('redirectionPageMap', [])
+            orientation =  content.get('orientation', None)
+            # margins =  content.get('margins', 0)
+            zoomMode =  content.get('zoomMode', None) # TODO treat
             # HACK for now we simply merge the pages
             pages = pages + pages_v5
     
@@ -101,6 +107,8 @@ def render(source, *,
     for i in range(0, len(pages)):
         template_name = pages[i].get("template", {}).get("value", None)
         page = document.DocumentPage(source, pages[i]["id"], i, template_name)
+        if page.version is not None:
+            version = page.version
         if source.exists(page.rmpath):
             changed_pages.append(i)
         page.render_to_painter(pdf_canvas, vector, template_alpha)
@@ -160,7 +168,7 @@ def render(source, *,
         # just add the annotations and forget about the rest,
         # which are page geometry transformations.
         if uses_base_pdf:
-            merge_pages(basepage, rmpage, i in changed_pages, expand_pages)
+            merge_pages(basepage, rmpage, i in changed_pages, expand_pages, version, orientation)
 
         progress_cb(((i + 1) / rmpdfr.numPages * 50) + 50)
 
@@ -440,7 +448,7 @@ def apply_annotations(rmpage, page_annot, ocgorderinner):
             rmpage.Annots.append(pdf_a)
 
 
-def merge_pages(basepage, rmpage, changed_page, expand_pages):
+def merge_pages(basepage, rmpage, changed_page, expand_pages, version, orientation):
     # The general appraoch is to keep the base PDF. So, all
     # operations must be made upon the basepage. PyPDF2 will
     # keep all those pages' metadata and annotations,
@@ -478,11 +486,17 @@ def merge_pages(basepage, rmpage, changed_page, expand_pages):
     # Round because floating point makes it prissy
     bpage_ratio = round(bpage_w / bpage_h * 10000) / 10000
     landscape_bpage = False
-    if bpage_w > bpage_h:
-        landscape_bpage = True
-        bpage_ratio = 1 / bpage_ratio # <= 1 always
-    if basepage.Rotate in ('90', '270'):
-        landscape_bpage = not landscape_bpage
+    if orientation is None:
+        # TODO it seems this is not necessary for v6
+        # and only the first page determines landscape or portrait
+        # TODO logic to treat the old format again and ladscape
+        if bpage_w > bpage_h:
+            landscape_bpage = True
+            bpage_ratio = 1 / bpage_ratio # <= 1 always
+        if basepage.Rotate in ('90', '270'):
+            landscape_bpage = not landscape_bpage
+    else:
+        landscape_bpage = orientation == "landscape"
 
     # If the base PDF page was really wide, the rM rotates
     # it -90deg (CCW) on the screen, but doesn't actually
@@ -498,7 +512,7 @@ def merge_pages(basepage, rmpage, changed_page, expand_pages):
     rpage_h = rpage_box[3] - rpage_box[1]
     rpage_ratio = rpage_w / rpage_h
 
-    effective_rotation = int(basepage.Rotate or 0)
+    effective_rotation = int(basepage.Rotate or 0) % 360
     # If the page is landscape, reMarkable adds a -90 degree rotation.
     if landscape_bpage:
         effective_rotation = (effective_rotation + 270) % 360
@@ -515,44 +529,51 @@ def merge_pages(basepage, rmpage, changed_page, expand_pages):
     else:
         assert False, f"Unexpected rotation: {effective_rotation}"
 
-    if bpage_ratio <= rpage_ratio:
-        # These ratios < 1, so this indicates the basepage is more
-        # narrow, and thus we need to extend the width.  Extra space
-        # is added to the right of the screen, but that ends up being
-        # a different page edge, depending on rotation.
-        if not flip_base_dims:
-            new_width = rpage_ratio * bpage_h
-            scale = bpage_h / rpage_h
-            if effective_rotation == 0:
-                bpage_box[2] = new_width + bpage_box[0]
-            else:
-                bpage_box[0] = bpage_box[2] - new_width
-        else:
-            # Height and width are flipped for the basepage
-            new_height = rpage_ratio * bpage_w
-            scale = bpage_w / rpage_h
-            if effective_rotation == 90:
-                bpage_box[3] = new_height + bpage_box[1]
-            else:
-                bpage_box[1] = bpage_box[3] - new_height
+    if version == 6:
+        scale = 1
+        # bpage_box[0] -= margins/2
+        # bpage_box[1] -= margins/2
+        # bpage_box[2] += margins/2
+        # bpage_box[3] += margins/2
     else:
-        # Basepage is wider, so need to expand the height.
-        # Extra space is added at the bottom of the screen.
-        if not flip_base_dims:
-            new_height = 1/rpage_ratio * bpage_w
-            scale = bpage_w / rpage_w
-            if effective_rotation == 0:
-                bpage_box[1] = bpage_box[3] - new_height
+        if bpage_ratio <= rpage_ratio:
+            # These ratios < 1, so this indicates the basepage is more
+            # narrow, and thus we need to extend the width.  Extra space
+            # is added to the right of the screen, but that ends up being
+            # a different page edge, depending on rotation.
+            if not flip_base_dims:
+                new_width = rpage_ratio * bpage_h
+                scale = bpage_h / rpage_h
+                if effective_rotation == 0:
+                    bpage_box[2] = new_width + bpage_box[0]
+                else:
+                    bpage_box[0] = bpage_box[2] - new_width
             else:
-                bpage_box[3] = new_height + bpage_box[1]
+                # Height and width are flipped for the basepage
+                new_height = rpage_ratio * bpage_w
+                scale = bpage_w / rpage_h
+                if effective_rotation == 90:
+                    bpage_box[3] = new_height + bpage_box[1]
+                else:
+                    bpage_box[1] = bpage_box[3] - new_height
         else:
-            # Height and width are flipped for the basepage
-            new_width = 1/rpage_ratio * bpage_h
-            scale = bpage_h / rpage_w
-            if effective_rotation == 90:
-                bpage_box[2] = new_width + bpage_box[0]
+            # Basepage is wider, so need to expand the height.
+            # Extra space is added at the bottom of the screen.
+            if not flip_base_dims:
+                new_height = 1/rpage_ratio * bpage_w
+                scale = bpage_w / rpage_w
+                if effective_rotation == 0:
+                    bpage_box[1] = bpage_box[3] - new_height
+                else:
+                    bpage_box[3] = new_height + bpage_box[1]
             else:
-                bpage_box[0] = bpage_box[2] - new_width
+                # Height and width are flipped for the basepage
+                new_width = 1/rpage_ratio * bpage_h
+                scale = bpage_h / rpage_w
+                if effective_rotation == 90:
+                    bpage_box[2] = new_width + bpage_box[0]
+                else:
+                    bpage_box[0] = bpage_box[2] - new_width
 
     if expand_pages:
         # Create a CropBox, whether or not there was one before.
