@@ -115,9 +115,10 @@ class DocumentPage:
         blocks = read_blocks(source)
 
         def to_segment(point: Point) -> Segment:
+            # TODO how to get the correct transformations?
             return Segment(
-                x=point.x + 1404 / 2.0,
-                y=point.y,
+                x=point.x * 0.7 + 1404 / 2.0 - 40,
+                y=point.y * 0.7, # - 1872 / 14.0,
                 speed=point.speed,
                 direction=point.direction,
                 width=point.width / 4.0,
@@ -130,6 +131,11 @@ class DocumentPage:
 
         for block in blocks:
             if isinstance(block, SceneLineItemBlock):
+                # import pprint
+                # print("block:")
+                # pprint.pprint(block)
+                # TODO this seems wrong!
+                block = block.item
                 if block.value is None:
                     continue
 
