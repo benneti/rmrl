@@ -19,12 +19,13 @@ import json
 import logging
 
 from reportlab.graphics import renderPDF
-from rmscene import Pen, PenColor, Point, SceneLineItemBlock, TreeNodeBlock, read_blocks
+from rmscene import read_blocks, SceneLineItemBlock, TreeNodeBlock
+from rmscene.scene_items import Pen, PenColor, Point
 from svglib.svglib import svg2rlg
 
 from . import lines, pens
 # use for v4 and v5
-from .lines import Layer, Segment, Stroke, getVersion
+from .lines import Layer, Segment, Stroke
 from .constants import DISPLAY, PDFHEIGHT, PDFWIDTH, PTPERPX, TEMPLATE_PATH
 from .pens.highlighter import HighlighterPen
 
@@ -47,6 +48,9 @@ class DocumentPage:
             pid = str(pagenum)
             self.rmpath = f'{{ID}}/{pid}.rm'
 
+        with self.source.open(self.rmpath, 'rb') as f:
+            self.version = lines.getVersion(f)
+
         # Try to load page metadata
         self.metadict = None
         metafilepath = f'{{ID}}/{pid}-metadata.json'
@@ -64,7 +68,7 @@ class DocumentPage:
         # Try to load template
         self.template = None
         # v4 and v5
-        ver = getVersion(self.source)
+        ver = self.version
         if ver == 6:
             template_path = TEMPLATE_PATH / f'{template_name}.svg'
             if template_name != 'Blank' and template_path.exists():
@@ -140,11 +144,11 @@ class DocumentPage:
                 current_strokes.append(stroke)
 
             elif isinstance(block, TreeNodeBlock):
-                if current_layer == block.label.value:
+                if current_layer == block.group.label.value:
                     continue
 
                 layers.append(Layer(current_strokes, current_layer))
-                current_layer = block.label.value
+                current_layer = block.group.label.value
                 current_strokes = []
             else:
                 print(f'warning: not converting block: {block.__class__}')
@@ -164,7 +168,7 @@ class DocumentPage:
         # Load reMy version of page layers
         pagelayers = None
         with self.source.open(self.rmpath, 'rb') as f:
-            ver = getVersion(self.source)
+            ver = self.version
             if ver == 6:
                 pagelayers = self.get_layers(f)
             else:

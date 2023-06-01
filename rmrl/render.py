@@ -77,14 +77,14 @@ def render(source, *,
     redirections = []  # page numbers. -1 means the page is an inserted note.
     if source.exists('{ID}.content'):
         with source.open('{ID}.content', 'r') as f:
-            # v4 and v5
-            pages_v4 = json.load(f).get('cPages', {}).get('pages', [])
-            # v6 documents
             content = json.load(f)
+            # pages for documents < v6
+            pages_v5 = content.get('cPages', {}).get('pages', [])
+            # v6 documents
             pages = content.get('pages', [])
             redirections = content.get('redirectionPageMap', [])
-            # for now we simply merge the pages
-            pages = pages + pages_v4
+            # HACK for now we simply merge the pages
+            pages = pages + pages_v5
     
     page_indices = redirections if redirections else range(0, len(pages))
 

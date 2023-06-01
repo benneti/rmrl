@@ -52,6 +52,7 @@ class UnsupportedVersion(Exception):
 class InvalidFormat(Exception):
     pass
 
+# source is a filedescriptor from which we can .read(N)
 def getVersion(source):
     header, ver, *_ = readStruct(S_HEADER_PAGE, source)
     if not header.startswith(HEADER_START):

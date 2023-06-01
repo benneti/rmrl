@@ -22,4 +22,8 @@ SPOOL_MAX = 10 * 1024 * 1024
 # TODO: parameterize
 TEMPLATE_PATH = xdg_data_home() / 'rmrl' / 'templates'
 
-VERSION = pkg_resources.get_distribution('rmrl').version
+try:
+    VERSION = pkg_resources.get_distribution('rmrl').version
+    # without installing this as a package finding the version is broken
+except pkg_resources.DistributionNotFound:
+    VERSION = 0.0

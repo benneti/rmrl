@@ -18,7 +18,8 @@ import io
 import sys
 import zipfile
 
-from . import render
+
+from .render import render
 from .constants import VERSION
 from .sources import ZipSource
 
@@ -50,4 +51,6 @@ def main():
     return 0
 
 if __name__ == '__main__':
+    if __package__ is None:
+        __package__ = "rmrl"
     sys.exit(main())
