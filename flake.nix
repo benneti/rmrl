@@ -13,13 +13,8 @@
             (final: prev: {
               python3 = prev.python3.override {
                 packageOverrides = f: p: {
-                  rmscene = pkgs.python3Packages.callPackage ./rmscene.nix {  };
                   rmrl = p.rmrl.overridePythonAttrs (o: {
                     src = self;
-                    propagatedBuildInputs = with f; o.propagatedBuildInputs ++ [
-                      setuptools
-                      rmscene
-                    ];
                   });
                 };
               };

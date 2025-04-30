@@ -105,8 +105,12 @@ def render(source, *,
     changed_pages = []
     annotations = []
     for i in range(0, len(pages)):
-        template_name = pages[i].get("template", {}).get("value", None)
-        page = document.DocumentPage(source, pages[i]["id"], i, template_name)
+        if type(pages[i]) is str:
+            template_name = None
+            page = document.DocumentPage(source, pages[i], i, template_name)
+        else:
+            template_name = pages[i].get("template", {}).get("value", None)
+            page = document.DocumentPage(source, pages[i]["id"], i, template_name)
         if page.version is not None:
             version = page.version
         if source.exists(page.rmpath):
